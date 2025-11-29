@@ -245,6 +245,7 @@ def main():
     # Main content area
     tab1, tab2 = st.tabs(["📄 Upload Documents", "💬 Ask Questions"])
     
+    
     with tab1:
         render_upload_tab()
     
