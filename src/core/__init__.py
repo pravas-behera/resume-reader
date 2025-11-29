@@ -1,0 +1,4 @@
+"""
+Core module - Configuration, exceptions, and logging
+"""
+
