@@ -10,7 +10,8 @@ from dotenv import load_dotenv
 from src.core.config import AppConfig
 from src.services.document_service import DocumentService
 from src.services.qa_service import QAService
-from src.domain.models import Question, ChatMessage
+from src.services.youtube_service import YouTubeService
+from src.domain.models import ChatMessage
 from src.core.exceptions import (
     DocumentProcessingError,
     QAChainError,
@@ -36,12 +37,17 @@ def initialize_session_state():
         st.session_state.document_service = None
     if "qa_service" not in st.session_state:
         st.session_state.qa_service = None
+    if "youtube_service" not in st.session_state:
+        st.session_state.youtube_service = None
     if "documents_loaded" not in st.session_state:
         st.session_state.documents_loaded = False
     if "config" not in st.session_state:
         st.session_state.config = None
     if "messages" not in st.session_state:
         st.session_state.messages = []
+    if "feature" not in st.session_state:
+        # Allows easy extension to add more feature sources later
+        st.session_state.feature = "Documents"
 
 
 def get_config_from_ui() -> AppConfig:
@@ -65,7 +71,15 @@ def render_sidebar():
     """Render sidebar configuration"""
     with st.sidebar:
         st.header("⚙️ Configuration")
-        
+
+        # Feature selector - makes it easy to add more sources later
+        feature = st.selectbox(
+            "Source",
+            ["Documents", "YouTube"],
+            index=0,
+            key="feature"
+        )
+
         # API Key input
         api_key = st.text_input(
             "OpenAI API Key",
@@ -98,53 +112,99 @@ def render_sidebar():
 
 
 def render_upload_tab():
-    """Render document upload tab"""
-    st.header("Upload Documents")
-    st.markdown("Upload PDF files to analyze")
-    
-    uploaded_files = st.file_uploader(
-        "Choose PDF files",
-        type=["pdf"],
-        accept_multiple_files=True
-    )
-    
-    api_key = st.session_state.get("api_key_input", "")
-    
-    if uploaded_files and api_key:
-        if st.button("Process Documents", type="primary"):
-            with st.spinner("Processing documents..."):
-                try:
-                    # Get configuration
-                    config = get_config_from_ui()
-                    st.session_state.config = config
-                    
-                    # Initialize document service
-                    document_service = DocumentService(config)
-                    
-                    # Process documents
-                    vectorstore = document_service.process_documents(uploaded_files)
-                    
-                    # Initialize QA service
-                    qa_service = QAService(vectorstore=vectorstore, config=config)
-                    
-                    # Store in session state
-                    st.session_state.document_service = document_service
-                    st.session_state.qa_service = qa_service
-                    st.session_state.documents_loaded = True
-                    
-                    st.success(f"✅ Successfully processed {len(uploaded_files)} document(s)!")
-                    st.info("You can now switch to the 'Ask Questions' tab to query your documents.")
-                    
-                except (APIKeyError, ConfigurationError) as e:
-                    st.error(f"Configuration error: {str(e)}")
-                except DocumentProcessingError as e:
-                    st.error(f"Error processing documents: {str(e)}")
-                except Exception as e:
-                    logger.exception("Unexpected error")
-                    st.error(f"Unexpected error: {str(e)}")
-    
-    elif uploaded_files and not api_key:
-        st.warning("⚠️ Please enter your OpenAI API key in the sidebar to process documents.")
+    """Render document upload / source processing tab"""
+    st.header("Upload / Provide Source")
+    st.markdown("Select a source type and provide input to process")
+
+    feature = st.session_state.get("feature", "Documents")
+
+    if feature == "Documents":
+        st.subheader("Upload Documents")
+        st.markdown("Upload PDF files to analyze")
+        uploaded_files = st.file_uploader(
+            "Choose PDF files",
+            type=["pdf"],
+            accept_multiple_files=True
+        )
+        api_key = st.session_state.get("api_key_input", "")
+
+        if uploaded_files and api_key:
+            if st.button("Process Documents", type="primary"):
+                with st.spinner("Processing documents..."):
+                    try:
+                        # Get configuration
+                        config = get_config_from_ui()
+                        st.session_state.config = config
+
+                        # Initialize document service
+                        document_service = DocumentService(config)
+
+                        # Process documents
+                        vectorstore = document_service.process_documents(uploaded_files)
+
+                        # Initialize QA service
+                        qa_service = QAService(vectorstore=vectorstore, config=config)
+
+                        # Store in session state
+                        st.session_state.document_service = document_service
+                        st.session_state.qa_service = qa_service
+                        st.session_state.documents_loaded = True
+
+                        st.success(f"✅ Successfully processed {len(uploaded_files)} document(s)!")
+                        st.info("You can now switch to the 'Ask Questions' tab to query your documents.")
+
+                    except (APIKeyError, ConfigurationError) as e:
+                        st.error(f"Configuration error: {str(e)}")
+                    except DocumentProcessingError as e:
+                        st.error(f"Error processing documents: {str(e)}")
+                    except Exception as e:
+                        logger.exception("Unexpected error")
+                        st.error(f"Unexpected error: {str(e)}")
+
+        elif uploaded_files and not api_key:
+            st.warning("⚠️ Please enter your OpenAI API key in the sidebar to process documents.")
+
+    elif feature == "YouTube":
+        st.subheader("YouTube URL")
+        st.markdown("Provide a YouTube video URL to analyze its transcript")
+
+        youtube_url = st.text_input("YouTube video URL", key="youtube_url_input", placeholder="https://www.youtube.com/watch?v=...")
+        api_key = st.session_state.get("api_key_input", "")
+
+        if youtube_url and api_key:
+            if st.button("Process YouTube", type="primary"):
+                with st.spinner("Processing YouTube video..."):
+                    try:
+                        # Get configuration
+                        config = get_config_from_ui()
+                        st.session_state.config = config
+
+                        # Initialize YouTube service
+                        yt_service = YouTubeService(config)
+
+                        # Process video -> vectorstore
+                        vectorstore = yt_service.process_video(youtube_url)
+
+                        # Initialize QA service
+                        qa_service = QAService(vectorstore=vectorstore, config=config)
+
+                        # Store in session state
+                        st.session_state.youtube_service = yt_service
+                        st.session_state.qa_service = qa_service
+                        st.session_state.documents_loaded = True
+
+                        st.success("✅ Successfully processed YouTube video!")
+                        st.info("You can now switch to the 'Ask Questions' tab to query the video transcript.")
+
+                    except (APIKeyError, ConfigurationError) as e:
+                        st.error(f"Configuration error: {str(e)}")
+                    except DocumentProcessingError as e:
+                        st.error(f"Error processing YouTube video: {str(e)}")
+                    except Exception as e:
+                        logger.exception("Unexpected error")
+                        st.error(f"Unexpected error: {str(e)}")
+        elif youtube_url and not api_key:
+            st.warning("⚠️ Please enter your OpenAI API key in the sidebar to process the YouTube video.")
 
 
 def render_qa_tab():
@@ -152,7 +212,7 @@ def render_qa_tab():
     st.header("Ask Questions")
     
     if not st.session_state.documents_loaded:
-        st.info("👈 Please upload and process documents in the 'Upload Documents' tab first.")
+        st.info("👈 Please upload and process documents or a video in the 'Upload / Provide Source' tab first.")
         return
     
     # Display chat history
@@ -237,14 +297,14 @@ def main():
     initialize_session_state()
     
     st.title("📚 Document Q&A System")
-    st.markdown("Upload documents and ask questions about them using AI")
-    
+    st.markdown("Upload documents or provide a YouTube link and ask questions about them using AI")
+
     # Render sidebar
     render_sidebar()
     
     # Main content area
-    tab1, tab2 = st.tabs(["📄 Upload Documents", "💬 Ask Questions"])
-    
+    tab1, tab2 = st.tabs(["📄 Upload / Source", "💬 Ask Questions"])
+
     
     with tab1:
         render_upload_tab()
@@ -255,4 +315,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
