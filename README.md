@@ -1,4 +1,4 @@
-# Document Q&A System
+# AI-Powered Knowledge Bot
 
 A professional document question-answering system built with LangChain, Streamlit, and OpenAI's ChatGPT API. This project follows SOLID principles and best practices for maintainable, scalable code.
 
@@ -10,6 +10,7 @@ A professional document question-answering system built with LangChain, Streamli
 - 🤖 **OpenAI Integration**: Powered by GPT-3.5 or GPT-4 models
 - 🎨 **Streamlit UI**: Clean and intuitive web interface
 - 🏗️ **Professional Architecture**: SOLID principles, dependency injection, and clean code structure
+- 📺 **YouTube Video Q&A**: Ask questions about YouTube videos by providing a video link (API only)
 
 ## Architecture
 
@@ -52,6 +53,8 @@ This project follows a clean architecture pattern with:
 
 ## Usage
 
+### Streamlit App (Document Q&A)
+
 1. **Run the Streamlit app**:
    ```bash
    streamlit run app.py
@@ -69,6 +72,29 @@ This project follows a clean architecture pattern with:
    - Switch to the "Ask Questions" tab
    - Type your question in the chat input
    - Get AI-powered answers based on your documents
+
+### FastAPI Endpoints (API Q&A)
+
+1. **Run the FastAPI server**:
+   ```bash
+   ./docenv/bin/uvicorn src.controllers.ask_api:app --reload
+   ```
+
+2. **Open your browser** to [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) for interactive API docs.
+
+3. **Ask questions about documents (file upload)**:
+   - Endpoint: `POST /document/ask`
+   - Form fields: `file` (UploadFile), `question` (str)
+
+4. **Ask questions about YouTube videos**:
+   - Endpoint: `POST /youtube/ask`
+   - Form fields: `url` (YouTube video link), `question` (str)
+   - Example using `curl`:
+     ```bash
+     curl -X POST http://127.0.0.1:8000/youtube/ask \
+       -F "url=https://www.youtube.com/watch?v=YOUR_VIDEO_ID" \
+       -F "question=What is this video about?"
+     ```
 
 ## Project Structure
 
