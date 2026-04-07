@@ -25,7 +25,7 @@ class YouTubeService:
         )
         logger.info(f"Initialized YouTubeService with {config.embedding_config.provider} embeddings")
 
-    def process_video(self, url: str) -> Any:
+    def process_video(self, url: str, existing_store: Any = None) -> Any:
         """Fetch transcript for the given YouTube URL and return an IVectorStore"""
         try:
             if not url or not url.strip():
@@ -50,9 +50,14 @@ class YouTubeService:
             texts = [chunk.content for chunk in chunks]
             embeddings = self.embedding_service.embed_documents(texts)
 
-            # Build vector store
-            vectorstore = FAISSVectorStore(embeddings=self.embedding_service.embeddings)
-            vectorstore.add_documents(chunks, embeddings)
+            # Build vector store (append to existing store if provided)
+            if existing_store is None:
+                vectorstore = FAISSVectorStore(embeddings=self.embedding_service.embeddings)
+                vectorstore.add_documents(chunks, embeddings)
+            else:
+                # Assume existing_store is a FAISSVectorStore instance
+                existing_store.add_documents(chunks, embeddings)
+                vectorstore = existing_store
 
             logger.info(f"Processed YouTube video {video_id} into vector store with {len(chunks)} chunks")
             return vectorstore
