@@ -15,11 +15,11 @@ Both entry points use the same service-level pipeline:
 source input
   -> processing service
   -> text chunks
-  -> OpenAI embeddings
+  -> selected embedding provider (OpenAI or Ollama)
   -> FAISS vector store
   -> QA service
   -> retrieval QA chain
-  -> OpenAI chat model
+  -> selected answer model provider (OpenAI or Ollama)
   -> answer
 ```
 
@@ -49,8 +49,12 @@ app.py
 | `config` | Current `AppConfig` |
 | `messages` | Chat history rendered in the question tab |
 | `feature` | Selected source type: `Documents` or `YouTube` |
+| `vectorstore` | Current in-memory FAISS vector store |
+| `qa_llm_signature` | Answer-model settings used by the current `QAService` |
+| `source_embedding_signature` | Embedding settings used to create the current vector store |
+| `processed_feature` | Source type used to create the current vector store |
 
-`render_sidebar()` collects the OpenAI API key, model name, temperature, and source type.
+`render_sidebar()` collects source type, answer model provider, embedding provider, model names, Ollama base URL, temperature, and the OpenAI API key when OpenAI is selected.
 
 ### 2. Document Processing Flow
 
@@ -64,7 +68,7 @@ sequenceDiagram
     participant Factory as DocumentLoaderFactory
     participant Loader as PDFLoader
     participant Splitter as RecursiveTextSplitter
-    participant Embed as OpenAIEmbeddingService
+    participant Embed as EmbeddingFactory / EmbeddingService
     participant Store as FAISSVectorStore
     participant QA as QAService
 
@@ -97,7 +101,9 @@ Key files:
 | Loader selection | `src/infrastructure/loaders/loader_factory.py` |
 | PDF loading | `src/infrastructure/loaders/pdf_loader.py` |
 | Chunking | `src/utils/text_splitter.py` |
-| Embeddings | `src/infrastructure/embeddings/openai_embeddings.py` |
+| Embedding selection | `src/infrastructure/embeddings/embedding_factory.py` |
+| OpenAI embeddings | `src/infrastructure/embeddings/openai_embeddings.py` |
+| Ollama embeddings | `src/infrastructure/embeddings/ollama_embeddings.py` |
 | Vector storage | `src/infrastructure/vectorstores/faiss_store.py` |
 
 ### 3. YouTube Processing Flow
@@ -111,7 +117,7 @@ sequenceDiagram
     participant YT as YouTubeService
     participant Utils as youtube_transcript utils
     participant Splitter as RecursiveTextSplitter
-    participant Embed as OpenAIEmbeddingService
+    participant Embed as EmbeddingFactory / EmbeddingService
     participant Store as FAISSVectorStore
     participant QA as QAService
 
@@ -141,12 +147,16 @@ Key files:
 | YouTube processing orchestration | `src/services/youtube_service.py` |
 | Video ID and transcript fetching | `src/utils/youtube_transcript.py` |
 | Chunking | `src/utils/text_splitter.py` |
-| Embeddings | `src/infrastructure/embeddings/openai_embeddings.py` |
+| Embedding selection | `src/infrastructure/embeddings/embedding_factory.py` |
+| OpenAI embeddings | `src/infrastructure/embeddings/openai_embeddings.py` |
+| Ollama embeddings | `src/infrastructure/embeddings/ollama_embeddings.py` |
 | Vector storage | `src/infrastructure/vectorstores/faiss_store.py` |
 
 ### 4. Question Answering Flow
 
-After either source is processed, the UI stores a `QAService` in `st.session_state.qa_service`.
+After either source is processed, the UI stores the vector store and a `QAService` in `st.session_state`.
+
+If the user changes only the answer model provider or answer model after processing, the UI rebuilds `QAService` with the existing vector store. If the user changes the embedding provider or embedding model, the UI asks the user to reprocess the source because the FAISS index must be created and queried with the same embedding model.
 
 When the user asks a question:
 
@@ -156,7 +166,7 @@ sequenceDiagram
     participant UI as src/app/main.py
     participant QA as QAService
     participant Retriever as FAISS retriever
-    participant LLM as OpenAIClient / ChatOpenAI
+    participant LLM as OpenAIClient or OllamaClient
 
     User->>UI: Submit question
     UI->>UI: Append user ChatMessage
@@ -181,19 +191,14 @@ Important details:
 | Prompt style | Uses retrieved context, says "I don't know" when answer is unavailable, and keeps the answer concise |
 | Chat state | Stored only in Streamlit session state |
 | Vector store persistence | In memory only for the current processed source/session |
+| Answer model switching | Rebuilds `QAService` against the existing vector store |
+| Embedding model switching | Requires source reprocessing |
 
 ## FastAPI Control Flow
 
 The API app lives in `src/controllers/ask_api.py`.
 
-At import/startup time:
-
-```text
-load_dotenv()
-api_key = os.getenv("OPENAI_API_KEY")
-config = AppConfig.from_env(api_key=api_key)
-doc_service = DocumentService(config)
-```
+At import/startup time, the API creates the FastAPI app and loads `.env`. Model configuration is built per request from form fields so each request can choose OpenAI or Ollama independently.
 
 ### `POST /document/ask`
 
@@ -203,11 +208,19 @@ This is a one-shot flow: each request uploads a file, builds a vector store, cre
 HTTP multipart form:
   file=<uploaded PDF>
   question=<question text>
+  api_key=<optional OpenAI key>
+  llm_provider=openai|ollama
+  llm_model=<answer model name>
+  embedding_provider=openai|ollama
+  embedding_model=<embedding model name>
+  ollama_base_url=http://127.0.0.1:11434
 
 ask_question()
+  -> build_config(...)
   -> await file.read()
   -> wrap bytes in BytesIO and set file_like.name
-  -> doc_service.process_documents([file_like])
+  -> DocumentService(config)
+  -> document_service.process_documents([file_like])
   -> QAService(vectorstore, config)
   -> qa_service.ask_question_text(question)
   -> return {"answer": answer}
@@ -221,9 +234,16 @@ This is also a one-shot flow: each request fetches the transcript, builds a vect
 HTTP multipart form:
   url=<YouTube URL>
   question=<question text>
+  api_key=<optional OpenAI key>
+  llm_provider=openai|ollama
+  llm_model=<answer model name>
+  embedding_provider=openai|ollama
+  embedding_model=<embedding model name>
+  ollama_base_url=http://127.0.0.1:11434
 
 youtube_ask()
   -> validate url is not empty
+  -> build_config(...)
   -> YouTubeService(config)
   -> yt_service.process_video(url)
   -> QAService(vectorstore, config)
@@ -238,8 +258,12 @@ youtube_ask()
 | `DocumentService` | Turn uploaded PDF files into a FAISS vector store |
 | `YouTubeService` | Turn a YouTube transcript into a FAISS vector store |
 | `QAService` | Turn a question plus vector store into an answer |
+| `EmbeddingFactory` | Select OpenAI or Ollama embedding service |
 | `OpenAIEmbeddingService` | Generate embeddings for chunks |
+| `OllamaEmbeddingService` | Generate local Ollama embeddings for chunks |
+| `LLMFactory` | Select OpenAI or Ollama answer model client |
 | `OpenAIClient` | Wrap the OpenAI chat model for answer generation |
+| `OllamaClient` | Wrap a local Ollama model for answer generation |
 | `FAISSVectorStore` | Hold chunk vectors and expose LangChain's retriever interface |
 | `RecursiveTextSplitter` | Convert `Document` objects into overlapping `DocumentChunk` objects |
 
@@ -249,7 +273,7 @@ The main custom exceptions are defined in `src/core/exceptions.py`.
 
 | Error | Typical source |
 | --- | --- |
-| `APIKeyError` | Missing OpenAI API key while initializing services |
+| `APIKeyError` | Missing OpenAI API key while an OpenAI provider is selected |
 | `ConfigurationError` | UI configuration creation failure |
 | `DocumentProcessingError` | Failed PDF loading, transcript fetching, chunking, embedding, or vector store creation |
 | `QAChainError` | Failed QA chain setup or answer generation |
@@ -267,5 +291,5 @@ In FastAPI, errors are caught in `src/controllers/ask_api.py` and converted to `
 | Persistence | Vector stores are not saved to disk |
 | Supported documents | PDF only |
 | Supported YouTube transcripts | English transcript lookup in `src/utils/youtube_transcript.py` |
-| External services | OpenAI for embeddings and chat completion; YouTube transcript API for transcripts |
+| External services | OpenAI or Ollama for embeddings and answer generation; YouTube transcript API for transcripts |
 | Retrieval implementation | `QAService` uses LangChain `RetrievalQA` with `vectorstore.as_retriever()` |

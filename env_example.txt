@@ -1,4 +1,22 @@
-# OpenAI API Configuration
-OPENAI_API_KEY=your_openai_api_key_here
+# Model provider configuration.
+# Use "openai" or "ollama" for each provider.
+LLM_PROVIDER=openai
+EMBEDDING_PROVIDER=openai
 
-# this is for git test in 1001
+# OpenAI configuration.
+# Required only when LLM_PROVIDER or EMBEDDING_PROVIDER is "openai".
+OPENAI_API_KEY=your_openai_api_key_here
+MODEL_NAME=gpt-3.5-turbo
+EMBEDDING_MODEL=text-embedding-ada-002
+
+# Ollama configuration.
+# Required only when LLM_PROVIDER or EMBEDDING_PROVIDER is "ollama".
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_LLM_MODEL=phi3
+OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+
+# Retrieval and chunking.
+TEMPERATURE=0.7
+CHUNK_SIZE=1000
+CHUNK_OVERLAP=200
+RETRIEVAL_K=3
