@@ -133,6 +133,6 @@ class DocumentLoaderFactory:
 
 - Main README: `README.md`
 - Architecture: `ARCHITECTURE.md`
+- Control flow: `CONTROL_FLOW.md`
 - Quick Start: `QUICKSTART.md`
 - This file: `PROJECT_STRUCTURE.md`
-
