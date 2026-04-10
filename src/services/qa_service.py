@@ -9,7 +9,7 @@ from langchain.chains import RetrievalQA
 from langchain_core.prompts import PromptTemplate
 from src.domain.interfaces import IQAService, IVectorStore
 from src.domain.models import Question, Answer, DocumentChunk
-from src.infrastructure.llm.openai_client import OpenAIClient
+from src.infrastructure.llm.llm_factory import LLMFactory
 from src.core.config import AppConfig
 from src.core.exceptions import QAChainError
 from src.core.logger import logger
@@ -26,18 +26,11 @@ class QAService(IQAService):
             vectorstore: Vector store with document embeddings
             config: Application configuration
         """
-        if not config.openai_api_key:
-            raise QAChainError("OpenAI API key is required")
-        
         self.vectorstore = vectorstore
         self.config = config
         
         # Initialize LLM
-        self.llm_client = OpenAIClient(
-            api_key=config.openai_api_key,
-            model_name=config.model_config.name,
-            temperature=config.model_config.temperature
-        )
+        self.llm_client = LLMFactory.create(config)
         
         # Create prompt template
         prompt_template = """Use the following pieces of context to answer the question at the end. 
@@ -70,7 +63,7 @@ class QAService(IQAService):
         else:
             raise QAChainError("Vector store does not support retriever interface")
         
-        logger.info("Initialized QAService")
+        logger.info(f"Initialized QAService with {config.model_config.provider} LLM")
     
     def ask_question(self, question: Question) -> Answer:
         """
@@ -135,4 +128,3 @@ class QAService(IQAService):
         )
         answer = self.ask_question(question)
         return answer.text
-

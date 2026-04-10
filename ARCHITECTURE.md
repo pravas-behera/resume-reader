@@ -25,6 +25,7 @@ This document describes the architecture of the Document Q&A System, which follo
 
 **Components**:
 - `document_service.py`: Handles document processing
+- `youtube_service.py`: Handles YouTube transcript processing
 - `qa_service.py`: Handles question-answering
 
 **Responsibilities**:
@@ -41,6 +42,8 @@ This document describes the architecture of the Document Q&A System, which follo
 - `vectorstores/`: Vector database implementations
 - `llm/`: LLM provider clients
 - `embeddings/`: Embedding service implementations
+- `llm/llm_factory.py`: Chooses OpenAI or Ollama answer model client
+- `embeddings/embedding_factory.py`: Chooses OpenAI or Ollama embedding service
 
 **Principles**:
 - Implements domain interfaces
@@ -75,9 +78,11 @@ This document describes the architecture of the Document Q&A System, which follo
 
 Each class has one reason to change:
 - `DocumentService`: Only handles document processing
+- `YouTubeService`: Only handles YouTube transcript processing
 - `QAService`: Only handles question-answering
 - `PDFLoader`: Only loads PDF files
 - `OpenAIClient`: Only interfaces with OpenAI API
+- `OllamaClient`: Only interfaces with local Ollama LLMs
 
 ### Open/Closed Principle (OCP)
 
@@ -85,6 +90,7 @@ Open for extension, closed for modification:
 - New document loaders can be added without modifying existing code
 - New vector stores can be added by implementing `IVectorStore`
 - New LLM providers can be added by implementing `ILLMService`
+- New embedding providers can be added by implementing `IEmbeddingService`
 
 ### Liskov Substitution Principle (LSP)
 
@@ -119,7 +125,8 @@ Depend on abstractions, not concretions:
 Different implementations for:
 - Document loaders (PDF, DOCX, etc.)
 - Vector stores (FAISS, Pinecone, etc.)
-- LLM providers (OpenAI, Anthropic, etc.)
+- LLM providers (OpenAI, Ollama, Anthropic, etc.)
+- Embedding providers (OpenAI, Ollama, etc.)
 
 ### Service Layer Pattern
 
@@ -172,6 +179,8 @@ Benefits:
 - Environment variable support
 - Type-safe configuration
 - Easy to extend
+- Supports separate providers for answer generation and embeddings
+- Supports local Ollama settings through `OLLAMA_BASE_URL`, `OLLAMA_LLM_MODEL`, and `OLLAMA_EMBEDDING_MODEL`
 
 ## Logging
 
@@ -199,7 +208,13 @@ Centralized logging:
 
 1. Create client in `src/infrastructure/llm/`
 2. Implement `ILLMService` interface
-3. Update `QAService` to use new provider (or make it configurable)
+3. Register provider selection in `LLMFactory`
+
+### Adding New Embedding Provider
+
+1. Create implementation in `src/infrastructure/embeddings/`
+2. Implement `IEmbeddingService` interface
+3. Register provider selection in `EmbeddingFactory`
 
 ## Testing Strategy
 
@@ -222,4 +237,3 @@ Centralized logging:
 - Input validation
 - File upload restrictions
 - Error message sanitization
-

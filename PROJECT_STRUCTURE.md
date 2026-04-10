@@ -32,7 +32,12 @@ This document provides a quick reference to the project structure and where to f
 ### 🎯 Want to add a new LLM provider?
 → `src/infrastructure/llm/`
 - Implement `ILLMService` interface
-- Update `QAService` to use it
+- Register it in `llm_factory.py`
+
+### 🎯 Want to add a new embedding provider?
+→ `src/infrastructure/embeddings/`
+- Implement `IEmbeddingService` interface
+- Register it in `embedding_factory.py`
 
 ## File Locations by Task
 
@@ -45,6 +50,9 @@ This document provides a quick reference to the project structure and where to f
 | Add new document model | `src/domain/models.py` |
 | Update UI layout | `src/app/main.py` |
 | Change embedding model | `src/core/config.py` → `EmbeddingConfig.model` |
+| Change LLM provider | `src/core/config.py` → `ModelConfig.provider` |
+| Change embedding provider | `src/core/config.py` → `EmbeddingConfig.provider` |
+| Change Ollama defaults | `src/core/config.py` → `OllamaConfig` |
 | Modify text splitting | `src/utils/text_splitter.py` |
 
 ## Key Interfaces
@@ -61,13 +69,15 @@ Located: `src/domain/interfaces.py`
 
 ### ILLMService
 Located: `src/domain/interfaces.py`
-- Implemented by: `OpenAIClient`
+- Implemented by: `OpenAIClient`, `OllamaClient`
+- Selected by: `LLMFactory`
 - Used by: `QAService`
 
 ### IEmbeddingService
 Located: `src/domain/interfaces.py`
-- Implemented by: `OpenAIEmbeddingService`
-- Used by: `DocumentService`
+- Implemented by: `OpenAIEmbeddingService`, `OllamaEmbeddingService`
+- Selected by: `EmbeddingFactory`
+- Used by: `DocumentService`, `YouTubeService`
 
 ## Dependency Flow
 
@@ -77,10 +87,15 @@ app.py
         └─> src/services/document_service.py
               ├─> src/infrastructure/loaders/loader_factory.py
               ├─> src/utils/text_splitter.py
-              ├─> src/infrastructure/embeddings/openai_embeddings.py
+              ├─> src/infrastructure/embeddings/embedding_factory.py
+              └─> src/infrastructure/vectorstores/faiss_store.py
+        └─> src/services/youtube_service.py
+              ├─> src/utils/youtube_transcript.py
+              ├─> src/utils/text_splitter.py
+              ├─> src/infrastructure/embeddings/embedding_factory.py
               └─> src/infrastructure/vectorstores/faiss_store.py
         └─> src/services/qa_service.py
-              ├─> src/infrastructure/llm/openai_client.py
+              ├─> src/infrastructure/llm/llm_factory.py
               └─> src/infrastructure/vectorstores/faiss_store.py
 ```
 
@@ -133,6 +148,6 @@ class DocumentLoaderFactory:
 
 - Main README: `README.md`
 - Architecture: `ARCHITECTURE.md`
+- Control flow: `CONTROL_FLOW.md`
 - Quick Start: `QUICKSTART.md`
 - This file: `PROJECT_STRUCTURE.md`
-

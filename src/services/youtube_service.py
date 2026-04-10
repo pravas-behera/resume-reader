@@ -4,8 +4,8 @@ Handles fetching transcript, splitting, embedding and creating a vectorstore
 """
 from typing import Any, List
 from src.core.config import AppConfig
-from src.core.exceptions import DocumentProcessingError, APIKeyError
-from src.infrastructure.embeddings.openai_embeddings import OpenAIEmbeddingService
+from src.core.exceptions import DocumentProcessingError
+from src.infrastructure.embeddings.embedding_factory import EmbeddingFactory
 from src.infrastructure.vectorstores.faiss_store import FAISSVectorStore
 from src.utils.text_splitter import RecursiveTextSplitter
 from src.utils.youtube_transcript import extract_video_id, fetch_transcript_text
@@ -17,19 +17,13 @@ class YouTubeService:
     """Service to process YouTube videos into a retrievable vector store"""
 
     def __init__(self, config: AppConfig):
-        if not config.openai_api_key:
-            raise APIKeyError("OpenAI API key is required")
-
         self.config = config
-        self.embedding_service = OpenAIEmbeddingService(
-            api_key=config.openai_api_key,
-            model=config.embedding_config.model
-        )
+        self.embedding_service = EmbeddingFactory.create(config)
         self.text_splitter = RecursiveTextSplitter(
             chunk_size=config.embedding_config.chunk_size,
             chunk_overlap=config.embedding_config.chunk_overlap
         )
-        logger.info("Initialized YouTubeService")
+        logger.info(f"Initialized YouTubeService with {config.embedding_config.provider} embeddings")
 
     def process_video(self, url: str, existing_store: Any = None) -> Any:
         """Fetch transcript for the given YouTube URL and return an IVectorStore"""
@@ -73,4 +67,3 @@ class YouTubeService:
         except Exception as e:
             logger.error(f"Error processing YouTube video: {str(e)}")
             raise DocumentProcessingError(f"Failed to process YouTube video: {str(e)}") from e
-

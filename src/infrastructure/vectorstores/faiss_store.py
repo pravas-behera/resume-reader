@@ -4,7 +4,6 @@ FAISS Vector Store Implementation
 
 from typing import List, Any
 from langchain_community.vectorstores import FAISS as LangChainFAISS
-from langchain_openai import OpenAIEmbeddings
 from src.domain.models import DocumentChunk
 from src.domain.interfaces import IVectorStore
 from src.infrastructure.vectorstores.base_store import BaseVectorStore
@@ -15,7 +14,7 @@ from src.core.logger import logger
 class FAISSVectorStore(BaseVectorStore):
     """FAISS vector store implementation"""
     
-    def __init__(self, embeddings: OpenAIEmbeddings):
+    def __init__(self, embeddings: Any):
         """
         Initialize FAISS vector store
         
@@ -103,4 +102,3 @@ class FAISSVectorStore(BaseVectorStore):
         if self._store is None:
             raise VectorStoreError("Vector store is empty")
         return self._store.as_retriever(**kwargs)
-

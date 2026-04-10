@@ -8,13 +8,12 @@ from typing import List, Any
 import tempfile
 import os
 from src.domain.interfaces import IDocumentService, IVectorStore
-from src.domain.models import Document, DocumentChunk
 from src.infrastructure.loaders.loader_factory import DocumentLoaderFactory
-from src.infrastructure.embeddings.openai_embeddings import OpenAIEmbeddingService
+from src.infrastructure.embeddings.embedding_factory import EmbeddingFactory
 from src.infrastructure.vectorstores.faiss_store import FAISSVectorStore
 from src.utils.text_splitter import RecursiveTextSplitter
 from src.core.config import AppConfig
-from src.core.exceptions import DocumentProcessingError, APIKeyError
+from src.core.exceptions import DocumentProcessingError
 from src.core.logger import logger
 
 
@@ -28,19 +27,13 @@ class DocumentService(IDocumentService):
         Args:
             config: Application configuration
         """
-        if not config.openai_api_key:
-            raise APIKeyError("OpenAI API key is required")
-        
         self.config = config
-        self.embedding_service = OpenAIEmbeddingService(
-            api_key=config.openai_api_key,
-            model=config.embedding_config.model
-        )
+        self.embedding_service = EmbeddingFactory.create(config)
         self.text_splitter = RecursiveTextSplitter(
             chunk_size=config.embedding_config.chunk_size,
             chunk_overlap=config.embedding_config.chunk_overlap
         )
-        logger.info("Initialized DocumentService")
+        logger.info(f"Initialized DocumentService with {config.embedding_config.provider} embeddings")
     
     def process_documents(self, files: List[Any]) -> IVectorStore:
         """
@@ -117,4 +110,3 @@ class DocumentService(IDocumentService):
         except Exception as e:
             logger.error(f"Unexpected error processing documents: {str(e)}")
             raise DocumentProcessingError(f"Failed to process documents: {str(e)}") from e
-
